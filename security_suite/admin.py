@@ -178,7 +178,7 @@ class SessionMonitorAdmin(admin.ModelAdmin):
                    'last_activity', 'status_badge']
     list_filter = ['is_suspicious', 'terminated', 'created_at', 'last_activity']
     search_fields = ['user__email', 'ip_address', 'session_key']
-    readonly_fields = ['session_key', 'created_at', 'expires_at', 'terminated_at']
+    readonly_fields = ['session_key', 'created_at', 'last_activity', 'expires_at', 'terminated_at']
     
     def location(self, obj):
         if obj.country and obj.city:

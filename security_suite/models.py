@@ -1,12 +1,14 @@
-from django.db import models
+from django.db import models, transaction
 from django.utils.translation import gettext_lazy as _
 from django.utils import timezone
 from django.conf import settings
-from django.contrib.postgres.fields import ArrayField
+#from django.contrib.postgres.fields import ArrayField
 from django.core.validators import validate_ipv4_address, validate_ipv6_address
 from django.core.exceptions import ValidationError
 from django.db import transaction
+from django.core import validators
 import uuid
+import json
 from datetime import timedelta
 import re
 import hashlib
@@ -15,6 +17,10 @@ import secrets
 from django.utils.html import strip_tags
 import bleach
 
+def validate_ip_address(ip):
+    # Custom validation logic (e.g., regex check or IP validation)
+    if not ip or not ip.strip():
+        raise ValidationError("Invalid IP address")
 
 def validate_no_html(value):
     """Enhanced validation that value contains no HTML tags"""
@@ -574,7 +580,14 @@ class IPBlacklist(models.Model):
     threat_score = models.FloatField(
         _('threat score'), 
         default=0.0,
-        validators=[models.validators.MinValueValidator(0), models.validators.MaxValueValidator(100)]
+        validators=[validators.MinValueValidator(0.0,
+                                      message= _('Threat score cannot be negative')
+                                      ), 
+                    validators.MaxValueValidator(100.0,
+                                      message=_('Threat score cannot exceed 100')
+                                    )
+        ],
+        help_text=_('Threat score (0-100)')
     )
     country_code = models.CharField(_('country code'), max_length=2, blank=True, db_index=True)
     asn = models.CharField(_('ASN'), max_length=20, blank=True)
@@ -661,24 +674,24 @@ class SecurityConfiguration(models.Model):
         _('max login attempts'), 
         default=5,
         validators=[
-            models.validators.MinValueValidator(3),
-            models.validators.MaxValueValidator(10)
+            validators.MinValueValidator(3),
+            validators.MaxValueValidator(10)
         ]
     )
     lockout_duration_minutes = models.IntegerField(
         _('lockout duration (minutes)'), 
         default=30,
         validators=[
-            models.validators.MinValueValidator(5),
-            models.validators.MaxValueValidator(1440)  # Max 24 hours
+            validators.MinValueValidator(5),
+            validators.MaxValueValidator(1440)  # Max 24 hours
         ]
     )
     session_timeout_minutes = models.IntegerField(
         _('session timeout (minutes)'), 
         default=30,
         validators=[
-            models.validators.MinValueValidator(5),
-            models.validators.MaxValueValidator(480)  # Max 8 hours
+            validators.MinValueValidator(5),
+            validators.MaxValueValidator(480)  # Max 8 hours
         ]
     )
     
@@ -687,8 +700,8 @@ class SecurityConfiguration(models.Model):
         _('min password length'), 
         default=12,
         validators=[
-            models.validators.MinValueValidator(8),
-            models.validators.MaxValueValidator(128)
+            validators.MinValueValidator(8),
+            validators.MaxValueValidator(128)
         ]
     )
     require_uppercase = models.BooleanField(_('require uppercase'), default=True)
@@ -699,16 +712,16 @@ class SecurityConfiguration(models.Model):
         _('password expiry days'), 
         default=90,
         validators=[
-            models.validators.MinValueValidator(30),
-            models.validators.MaxValueValidator(365)
+            validators.MinValueValidator(30),
+            validators.MaxValueValidator(365)
         ]
     )
     password_history_count = models.IntegerField(
         _('password history count'), 
         default=12,
         validators=[
-            models.validators.MinValueValidator(3),
-            models.validators.MaxValueValidator(24)
+            validators.MinValueValidator(3),
+            validators.MaxValueValidator(24)
         ]
     )
     
@@ -718,24 +731,24 @@ class SecurityConfiguration(models.Model):
         _('MFA grace period (days)'), 
         default=7,
         validators=[
-            models.validators.MinValueValidator(0),
-            models.validators.MaxValueValidator(30)
+            validators.MinValueValidator(0),
+            validators.MaxValueValidator(30)
         ]
     )
     mfa_backup_codes_count = models.IntegerField(
         _('MFA backup codes'), 
         default=10,
         validators=[
-            models.validators.MinValueValidator(5),
-            models.validators.MaxValueValidator(20)
+            validators.MinValueValidator(5),
+            validators.MaxValueValidator(20)
         ]
     )
     mfa_remember_device_days = models.IntegerField(
         _('MFA remember device (days)'),
         default=30,
         validators=[
-            models.validators.MinValueValidator(0),
-            models.validators.MaxValueValidator(90)
+            validators.MinValueValidator(0),
+            validators.MaxValueValidator(90)
         ]
     )
     
@@ -745,29 +758,29 @@ class SecurityConfiguration(models.Model):
         _('rate limit requests'), 
         default=100,
         validators=[
-            models.validators.MinValueValidator(10),
-            models.validators.MaxValueValidator(1000)
+            validators.MinValueValidator(10),
+            validators.MaxValueValidator(1000)
         ]
     )
     rate_limit_period_seconds = models.IntegerField(
         _('rate limit period (seconds)'), 
         default=3600,
         validators=[
-            models.validators.MinValueValidator(60),
-            models.validators.MaxValueValidator(86400)  # Max 24 hours
+            validators.MinValueValidator(60),
+            validators.MaxValueValidator(86400)  # Max 24 hours
         ]
     )
     
     # IP restrictions
     ip_whitelist_enabled = models.BooleanField(_('IP whitelist enabled'), default=False)
-    ip_whitelist = ArrayField(
-        models.GenericIPAddressField(),
-        blank=True,
-        default=list,
-        help_text=_('List of whitelisted IP addresses'),
-        validators=[lambda x: len(x) <= 1000]  # Limit array size
-    )
-    
+    # ip_whitelist = ArrayField(
+    #     models.GenericIPAddressField(),
+    #     blank=True,
+    #     default=list,
+    #     help_text=_('List of whitelisted IP addresses'),
+    #     validators=[lambda x: len(x) <= 1000]  # Limit array size
+    # )
+    ip_whitelist = models.JSONField(default=list, validators=[validate_ip_address])
     # Security headers
     security_headers_enabled = models.BooleanField(_('security headers enabled'), default=True)
     content_security_policy = models.TextField(
@@ -788,16 +801,16 @@ class SecurityConfiguration(models.Model):
         _('audit retention days'), 
         default=90,
         validators=[
-            models.validators.MinValueValidator(30),
-            models.validators.MaxValueValidator(730)  # Max 2 years
+            validators.MinValueValidator(30),
+            validators.MaxValueValidator(730)  # Max 2 years
         ]
     )
     failed_login_threshold = models.IntegerField(
         _('failed login threshold'), 
         default=10,
         validators=[
-            models.validators.MinValueValidator(5),
-            models.validators.MaxValueValidator(50)
+            validators.MinValueValidator(5),
+            validators.MaxValueValidator(50)
         ]
     )
     
@@ -806,12 +819,12 @@ class SecurityConfiguration(models.Model):
     alert_threshold_critical = models.IntegerField(
         _('critical alert threshold'), 
         default=1,
-        validators=[models.validators.MinValueValidator(1)]
+        validators=[validators.MinValueValidator(1)]
     )
     alert_threshold_high = models.IntegerField(
         _('high alert threshold'), 
         default=5,
-        validators=[models.validators.MinValueValidator(1)]
+        validators=[validators.MinValueValidator(1)]
     )
     
     # Session security
@@ -848,6 +861,7 @@ class SecurityConfiguration(models.Model):
     
     def __str__(self):
         return f"{self.name} {'(Active)' if self.is_active else ''}"
+    
     
     def clean(self):
         """Validate configuration logic"""
@@ -906,7 +920,8 @@ class SessionMonitor(models.Model):
         _('session key hash'), 
         max_length=64,  # SHA256 hash length
         unique=True, 
-        db_index=True
+        db_index=True,
+        help_text=_('Hashed session key for secure storage')
     )
     
     # Session details
@@ -931,21 +946,27 @@ class SessionMonitor(models.Model):
     expires_at = models.DateTimeField(_('expires at'), db_index=True)
     page_views = models.PositiveIntegerField(_('page views'), default=0)
     api_calls = models.PositiveIntegerField(_('API calls'), default=0)
-    
+    is_active = models.BooleanField(_('active'), default=True, db_index=True)
     # Security analytics
     is_suspicious = models.BooleanField(_('suspicious'), default=False, db_index=True)
     risk_score = models.FloatField(
         _('risk score'), 
         default=0.0,
-        validators=[models.validators.MinValueValidator(0), models.validators.MaxValueValidator(100)]
+        validators=[validators.MinValueValidator(0), validators.MaxValueValidator(100)]
     )
-    anomaly_flags = ArrayField(
-        models.CharField(max_length=50),
-        blank=True,
+    # anomaly_flags = ArrayField(
+    #     models.CharField(max_length=50),
+    #     blank=True,
+    #     default=list,
+    #     help_text=_('List of detected anomalies')
+    # )
+    anomaly_flags = models.JSONField(
+        _('anomaly flags'),
         default=list,
-        help_text=_('List of detected anomalies')
+        blank=True,
+        help_text=_('List of detected anomalies'),
+        validators=[validate_safe_text]
     )
-    
     # Termination tracking
     terminated = models.BooleanField(_('terminated'), default=False, db_index=True)
     terminated_at = models.DateTimeField(_('terminated at'), null=True, blank=True)
@@ -994,7 +1015,7 @@ class SessionMonitor(models.Model):
         ]
     
     def __str__(self):
-        return f"{self.user.email} - {self.ip_address}"
+        return f"{self.user.email} - {self.user.username} - {self.ip_address}"
     
     def save(self, *args, **kwargs):
         """Override save to handle session key hashing"""
@@ -1178,13 +1199,19 @@ class ThreatIntelligence(models.Model):
     )
     source = models.CharField(_('source'), max_length=100, db_index=True)
     source_url = models.URLField(_('source URL'), blank=True)
-    tags = ArrayField(
-        models.CharField(max_length=50),
-        blank=True,
+    # tags = ArrayField(
+    #     models.CharField(max_length=50),
+    #     blank=True,
+    #     default=list,
+    #     validators=[lambda x: len(x) <= 50]  # Limit tags
+    # )
+    tags = models.JSONField(
+        _('Tags'),
         default=list,
-        validators=[lambda x: len(x) <= 50]  # Limit tags
+        blank=True,
+        help_text=_('List of tags for categorization'),
+        validators=[validate_safe_text]
     )
-    
     # Status and lifecycle
     is_active = models.BooleanField(_('active'), default=True, db_index=True)
     first_seen = models.DateTimeField(_('first seen'), auto_now_add=True)
@@ -1195,14 +1222,14 @@ class ThreatIntelligence(models.Model):
     confidence = models.IntegerField(
         _('confidence'),
         default=100,
-        validators=[models.validators.MinValueValidator(0), models.validators.MaxValueValidator(100)]
+        validators=[validators.MinValueValidator(0), validators.MaxValueValidator(100)]
     )
     hit_count = models.IntegerField(_('hit count'), default=0, db_index=True)
     false_positive_count = models.IntegerField(_('false positive count'), default=0)
     severity_score = models.FloatField(
         _('severity score'), 
         default=0.0,
-        validators=[models.validators.MinValueValidator(0), models.validators.MaxValueValidator(100)]
+        validators=[validators.MinValueValidator(0), validators.MaxValueValidator(100)]
     )
     
     # Attribution
@@ -1224,17 +1251,23 @@ class ThreatIntelligence(models.Model):
         _('port'), 
         null=True, 
         blank=True,
-        validators=[models.validators.MaxValueValidator(65535)]
+        validators=[validators.MaxValueValidator(65535)]
     )
     protocol = models.CharField(_('protocol'), max_length=10, blank=True)
     country_code = models.CharField(_('country code'), max_length=2, blank=True, db_index=True)
     asn = models.CharField(_('ASN'), max_length=20, blank=True)
     
     # Additional intelligence
-    related_indicators = ArrayField(
-        models.CharField(max_length=512),
-        blank=True,
+    # related_indicators = ArrayField(
+    #     models.CharField(max_length=512),
+    #     blank=True,
+    #     default=list,
+    #     help_text=_('Related threat indicators')
+    # )
+    related_indicators = models.JSONField(
+        _('Related Indicators'),
         default=list,
+        blank=True,
         help_text=_('Related threat indicators')
     )
     iocs = models.JSONField(
@@ -1629,16 +1662,23 @@ class SecurityIncident(models.Model):
     )
     
     # Impact assessment
-    affected_systems = ArrayField(
-        models.CharField(max_length=100),
-        blank=True,
+    # affected_systems = ArrayField(
+    #     models.CharField(max_length=100),
+    #     blank=True,
+    #     default=list,
+    #     validators=[lambda x: len(x) <= 100]  # Limit array size
+    # )
+    affected_systems = models.JSONField(
+        _('affected systems'),
         default=list,
-        validators=[lambda x: len(x) <= 100]  # Limit array size
+        blank=True,
+        help_text=_('List of affected systems or components'),
+        validators=[validate_safe_text]
     )
     affected_users_count = models.PositiveIntegerField(
         _('affected users count'), 
         default=0,
-        validators=[models.validators.MaxValueValidator(1000000)]
+        validators=[validators.MaxValueValidator(1000000)]
     )
     data_compromised = models.BooleanField(_('data compromised'), default=False)
     financial_impact = models.DecimalField(
@@ -1647,7 +1687,7 @@ class SecurityIncident(models.Model):
         decimal_places=2,
         null=True,
         blank=True,
-        validators=[models.validators.MinValueValidator(0)]
+        validators=[validators.MinValueValidator(0)]
     )
     
     # Related alerts
@@ -1670,13 +1710,19 @@ class SecurityIncident(models.Model):
     )
     
     # Incident response team
-    response_team = ArrayField(
-        models.EmailField(),
-        blank=True,
+    # response_team = ArrayField(
+    #     models.EmailField(),
+    #     blank=True,
+    #     default=list,
+    #     help_text=_('Email addresses of response team members')
+    # )
+    response_team = models.JSONField(
+        _('response team'),
         default=list,
-        help_text=_('Email addresses of response team members')
+        blank=True,
+        help_text=_('Email addresses for incident response team members'),
+        validators=[validate_safe_text]
     )
-    
     # Evidence and artifacts
     evidence_collected = models.BooleanField(_('evidence collected'), default=False)
     chain_of_custody = models.JSONField(
@@ -1816,7 +1862,7 @@ class ComplianceFramework(models.Model):
     compliance_percentage = models.FloatField(
         _('compliance percentage'), 
         default=0.0,
-        validators=[models.validators.MinValueValidator(0), models.validators.MaxValueValidator(100)]
+        validators=[validators.MinValueValidator(0), validators.MaxValueValidator(100)]
     )
     last_assessment = models.DateTimeField(_('last assessment'), null=True, blank=True)
     next_assessment = models.DateTimeField(_('next assessment'), null=True, blank=True)

@@ -88,6 +88,9 @@ MIDDLEWARE = [
     'audit_trail.middleware.AuditMiddleware',
     'django_prometheus.middleware.PrometheusAfterMiddleware',
     'allauth.account.middleware.AccountMiddleware',
+    'linebot.security_suite.middleware.SecurityMiddleware',
+    'security_suite.middleware.SecurityMiddleware',
+    'security_suite.middleware.SessionSecurityMiddleware',
 ]
 
 ROOT_URLCONF = 'config.urls'
@@ -209,19 +212,31 @@ AUTHENTICATION_BACKENDS = [
     'guardian.backends.ObjectPermissionBackend',
     'allauth.account.auth_backends.AuthenticationBackend',
 ]
-
+ACCOUNT_SIGNUP_FIELDS = [
+    'email*',
+    'password1*', 
+    'password2*'
+]
 # Django-allauth settings
-ACCOUNT_AUTHENTICATION_METHOD = 'email'
-ACCOUNT_EMAIL_REQUIRED = True
+ACCOUNT_LOGIN_METHODS = {'email'}
+#ACCOUNT_SIGNUP_FIELDS = ['email*', 'password1*', 'password2*']
+ACCOUNT_RATE_LIMITS = {
+    'login_failed': {'attempts': 5, 'timeout': 300}  # 5 attempts, 5 minutes timeout
+}
+# Authentication settings
 ACCOUNT_EMAIL_VERIFICATION = 'mandatory'
-ACCOUNT_USERNAME_REQUIRED = False
-ACCOUNT_USER_MODEL_USERNAME_FIELD = None
-ACCOUNT_SESSION_REMEMBER = False
+ACCOUNT_LOGIN_ON_EMAIL_CONFIRMATION = True
+ACCOUNT_LOGIN_ON_PASSWORD_RESET = True
+ACCOUNT_LOGOUT_ON_PASSWORD_CHANGE = True
+ACCOUNT_SESSION_REMEMBER = True
+ACCOUNT_CONFIRM_EMAIL_ON_GET = True
 ACCOUNT_UNIQUE_EMAIL = True
+ACCOUNT_SESSION_REMEMBER = True
+ACCOUNT_CONFIRM_EMAIL_ON_GET = True
 ACCOUNT_LOGOUT_ON_GET = False
-ACCOUNT_LOGIN_ATTEMPTS_LIMIT = 5
-ACCOUNT_LOGIN_ATTEMPTS_TIMEOUT = 300  # 5 minutes
 
+if DEBUG:
+    EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
 # Email configuration
 EMAIL_BACKEND = env('EMAIL_BACKEND')
 EMAIL_HOST = env('EMAIL_HOST')
@@ -311,13 +326,21 @@ CSP_IMG_SRC = ("'self'", 'data:', 'https:')
 CSP_FONT_SRC = ("'self'", 'https://fonts.gstatic.com')
 CSP_CONNECT_SRC = ("'self'",)
 
-# Django-axes configuration
+# Django-axes settings
+# Remove deprecated settings and use new ones:
+AXES_ENABLED = True
 AXES_FAILURE_LIMIT = 5
-AXES_COOLOFF_TIME = timedelta(minutes=30)
+AXES_LOCK_OUT_AT_FAILURE = True
+AXES_COOLOFF_TIME = 1  # hours
+AXES_ONLY_USER_FAILURES = True  # Replace AXES_LOCK_OUT_BY_COMBINATION_USER_AND_IP
 AXES_RESET_ON_SUCCESS = True
+# Django-axes configuration
+#AXES_FAILURE_LIMIT = 5
+AXES_COOLOFF_TIME = timedelta(minutes=30)
+#AXES_RESET_ON_SUCCESS = True
 AXES_LOCKOUT_TEMPLATE = 'security/lockout.html'
-AXES_USE_USER_AGENT = True
-AXES_LOCK_OUT_BY_COMBINATION_USER_AND_IP = True
+#AXES_USE_USER_AGENT = True
+#AXES_LOCK_OUT_BY_COMBINATION_USER_AND_IP = True
 AXES_IPWARE_PROXY_COUNT = 1
 AXES_IPWARE_META_PRECEDENCE_ORDER = [
     'HTTP_X_FORWARDED_FOR',
