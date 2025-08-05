@@ -1297,7 +1297,7 @@ class ThreatIntelligence(models.Model):
                 'hash_sha256': 64
             }
             expected_length = hash_lengths[self.threat_type]
-            if not re.match(f'^[a-fA-F0-9]{{{expected_length}}} , self.threat_value):
+            if not re.match(f'^[a-fA-F0-9]{{{expected_length}}} , self.threat_value'):
                 raise ValidationError(f'Invalid {self.threat_type} format')
     
     def __str__(self):
