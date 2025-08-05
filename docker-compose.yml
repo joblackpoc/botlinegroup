@@ -1,0 +1,68 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:14
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    environment:
+      - POSTGRES_DB=line_bot_security_db
+      - POSTGRES_USER=line_bot_user
+      - POSTGRES_PASSWORD=your-db-password-here
+    ports:
+      - "5432:5432"
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+
+  rabbitmq:
+    image: rabbitmq:3.12-management
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    environment:
+      - RABBITMQ_DEFAULT_USER=guest
+      - RABBITMQ_DEFAULT_PASS=guest
+
+  web:
+    build: .
+    command: python manage.py runserver 0.0.0.0:8000
+    volumes:
+      - .:/code
+    ports:
+      - "8000:8000"
+    depends_on:
+      - db
+      - redis
+      - rabbitmq
+    env_file:
+      - .env
+
+  celery:
+    build: .
+    command: celery -A config worker -l info
+    volumes:
+      - .:/code
+    depends_on:
+      - db
+      - redis
+      - rabbitmq
+    env_file:
+      - .env
+
+  celery-beat:
+    build: .
+    command: celery -A config beat -l info
+    volumes:
+      - .:/code
+    depends_on:
+      - db
+      - redis
+      - rabbitmq
+    env_file:
+      - .env
+
+volumes:
+  postgres_data:

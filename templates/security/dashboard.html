@@ -1,0 +1,971 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Security Dashboard - LINE Bot Security Suite{% endblock %}
+
+{% block extra_css %}
+<style>
+    .stat-card {
+        transition: transform 0.2s;
+        border: none;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    .stat-card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+    }
+    .alert-badge {
+        font-size: 0.8rem;
+    }
+    .chart-container {
+        position: relative;
+        height: 300px;
+    }
+    .activity-timeline {
+        max-height: 400px;
+        overflow-y: auto;
+    }
+    .metric-value {
+        font-size: 2.5rem;
+        font-weight: bold;
+    }
+    .metric-label {
+        font-size: 0.9rem;
+        opacity: 0.8;
+    }
+    .list-group-item {
+        border-left: 3px solid transparent;
+    }
+    .list-group-item.severity-critical {
+        border-left-color: #dc3545;
+    }
+    .list-group-item.severity-high {
+        border-left-color: #ffc107;
+    }
+    .list-group-item.severity-medium {
+        border-left-color: #17a2b8;
+    }
+    .quick-stat {
+        text-align: center;
+        padding: 1rem;
+        border-right: 1px solid #dee2e6;
+    }
+    .quick-stat:last-child {
+        border-right: none;
+    }
+    .status-indicator {
+        display: inline-block;
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        margin-right: 5px;
+    }
+    .status-online {
+        background-color: #28a745;
+        animation: pulse 2s infinite;
+    }
+    @keyframes pulse {
+        0% {
+            box-shadow: 0 0 0 0 rgba(40, 167, 69, 0.7);
+        }
+        70% {
+            box-shadow: 0 0 0 10px rgba(40, 167, 69, 0);
+        }
+        100% {
+            box-shadow: 0 0 0 0 rgba(40, 167, 69, 0);
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- Header -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center">
+                <h1 class="mb-0">
+                    <i class="bi bi-shield-check"></i> Security Dashboard
+                </h1>
+                <div>
+                    <span class="status-indicator status-online"></span>
+                    <span class="text-muted">Last updated: <span id="last-updated">just now</span></span>
+                    <button class="btn btn-sm btn-outline-secondary ms-3" onclick="loadDashboardData()">
+                        <i class="bi bi-arrow-clockwise"></i> Refresh
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Summary Cards Row -->
+    <div class="row mb-4">
+        <div class="col-xl-3 col-md-6 mb-3">
+            <div class="card stat-card text-white bg-danger">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6 class="card-title mb-1">
+                                <i class="bi bi-exclamation-triangle"></i> Active Alerts
+                            </h6>
+                            <h2 class="mb-0" id="active-alerts-count">--</h2>
+                            <small id="critical-alerts-text">-- critical</small>
+                        </div>
+                        <div class="opacity-75">
+                            <i class="bi bi-exclamation-triangle-fill" style="font-size: 3rem;"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-xl-3 col-md-6 mb-3">
+            <div class="card stat-card text-white bg-warning">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6 class="card-title mb-1">
+                                <i class="bi bi-shield-x"></i> Failed Logins
+                            </h6>
+                            <h2 class="mb-0" id="failed-logins-count">--</h2>
+                            <small>Last 24 hours</small>
+                        </div>
+                        <div class="opacity-75">
+                            <i class="bi bi-shield-fill-x" style="font-size: 3rem;"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-xl-3 col-md-6 mb-3">
+            <div class="card stat-card text-white bg-info">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6 class="card-title mb-1">
+                                <i class="bi bi-people"></i> Active Sessions
+                            </h6>
+                            <h2 class="mb-0" id="active-sessions-count">--</h2>
+                            <small id="suspicious-sessions-text">-- suspicious</small>
+                        </div>
+                        <div class="opacity-75">
+                            <i class="bi bi-people-fill" style="font-size: 3rem;"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-xl-3 col-md-6 mb-3">
+            <div class="card stat-card text-white bg-dark">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6 class="card-title mb-1">
+                                <i class="bi bi-slash-circle"></i> Blocked IPs
+                            </h6>
+                            <h2 class="mb-0" id="blocked-ips-count">--</h2>
+                            <small id="new-blocks-text">-- today</small>
+                        </div>
+                        <div class="opacity-75">
+                            <i class="bi bi-slash-circle-fill" style="font-size: 3rem;"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Quick Stats Row -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-3 quick-stat">
+                            <div class="metric-label">Total Users</div>
+                            <div class="metric-value text-primary" id="total-users">--</div>
+                            <small class="text-muted">
+                                <span id="pending-users">--</span> pending approval
+                            </small>
+                        </div>
+                        <div class="col-md-3 quick-stat">
+                            <div class="metric-label">Active Today</div>
+                            <div class="metric-value text-success" id="active-today">--</div>
+                            <small class="text-muted">users</small>
+                        </div>
+                        <div class="col-md-3 quick-stat">
+                            <div class="metric-label">Without MFA</div>
+                            <div class="metric-value text-warning" id="without-mfa">--</div>
+                            <small class="text-muted">users at risk</small>
+                        </div>
+                        <div class="col-md-3 quick-stat">
+                            <div class="metric-label">Avg Response</div>
+                            <div class="metric-value text-info" id="avg-response">--</div>
+                            <small class="text-muted">milliseconds</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Quick Actions -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header bg-light">
+                    <h5 class="mb-0">
+                        <i class="bi bi-lightning"></i> Quick Actions
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <a href="{% url 'admin:accounts_customuser_changelist' %}?approval_status=pending" class="btn btn-primary me-2 mb-2">
+                        <i class="bi bi-person-check"></i> Approve Users
+                        <span class="badge bg-light text-dark ms-1" id="pending-badge">0</span>
+                    </a>
+                    <a href="{% url 'admin:security_suite_securityalert_changelist' %}?status=new" class="btn btn-warning me-2 mb-2">
+                        <i class="bi bi-bell"></i> View Alerts
+                        <span class="badge bg-light text-dark ms-1" id="alerts-badge">0</span>
+                    </a>
+                    <a href="{% url 'admin:security_suite_sessionmonitor_changelist' %}" class="btn btn-info me-2 mb-2">
+                        <i class="bi bi-display"></i> Monitor Sessions
+                    </a>
+                    <a href="{% url 'admin:audit_trail_auditlog_changelist' %}" class="btn btn-secondary me-2 mb-2">
+                        <i class="bi bi-journal-text"></i> Audit Logs
+                    </a>
+                    <a href="{% url 'admin:line_bot_linegroup_changelist' %}" class="btn btn-success me-2 mb-2">
+                        <i class="bi bi-chat-dots"></i> LINE Groups
+                    </a>
+                    <button class="btn btn-outline-danger mb-2" onclick="generateSecurityReport()">
+                        <i class="bi bi-file-earmark-pdf"></i> Security Report
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Main Content Row -->
+    <div class="row mb-4">
+        <!-- Recent Alerts -->
+        <div class="col-lg-6 mb-4">
+            <div class="card h-100">
+                <div class="card-header bg-light d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">
+                        <i class="bi bi-exclamation-circle"></i> Recent Security Alerts
+                    </h5>
+                    <a href="{% url 'admin:security_suite_securityalert_changelist' %}" class="btn btn-sm btn-outline-primary">
+                        View All
+                    </a>
+                </div>
+                <div class="card-body">
+                    <div id="alerts-container" class="activity-timeline">
+                        <div class="text-center text-muted py-3">
+                            <div class="spinner-border spinner-border-sm" role="status">
+                                <span class="visually-hidden">Loading...</span>
+                            </div>
+                            Loading alerts...
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- System Status -->
+        <div class="col-lg-6 mb-4">
+            <div class="card h-100">
+                <div class="card-header bg-light">
+                    <h5 class="mb-0">
+                        <i class="bi bi-activity"></i> System Status
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="mb-4">
+                        <div class="d-flex justify-content-between mb-2">
+                            <span>Response Time</span>
+                            <span class="badge" id="response-badge">Normal</span>
+                        </div>
+                        <div class="progress" style="height: 20px;">
+                            <div class="progress-bar" id="response-progress" role="progressbar" style="width: 0%">
+                                <span id="response-text">0ms</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-4">
+                        <div class="d-flex justify-content-between mb-2">
+                            <span>Error Rate</span>
+                            <span class="badge" id="error-badge">Low</span>
+                        </div>
+                        <div class="progress" style="height: 20px;">
+                            <div class="progress-bar" id="error-progress" role="progressbar" style="width: 0%">
+                                <span id="error-text">0%</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-4">
+                        <div class="d-flex justify-content-between mb-2">
+                            <span>API Requests (24h)</span>
+                            <span class="badge bg-info" id="requests-badge">--</span>
+                        </div>
+                    </div>
+                    
+                    <hr>
+                    
+                    <div class="row text-center">
+                        <div class="col-4">
+                            <small class="text-muted">CPU Usage</small>
+                            <h5 class="mb-0" id="cpu-usage">--</h5>
+                        </div>
+                        <div class="col-4">
+                            <small class="text-muted">Memory</small>
+                            <h5 class="mb-0" id="memory-usage">--</h5>
+                        </div>
+                        <div class="col-4">
+                            <small class="text-muted">Storage</small>
+                            <h5 class="mb-0" id="storage-usage">--</h5>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Activity Timeline -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header bg-light">
+                    <h5 class="mb-0">
+                        <i class="bi bi-graph-up"></i> 7-Day Activity Timeline
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <canvas id="activityChart" class="chart-container"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Threat Intelligence -->
+    <div class="row">
+        <div class="col-md-6 mb-4">
+            <div class="card">
+                <div class="card-header bg-light">
+                    <h5 class="mb-0">
+                        <i class="bi bi-geo-alt"></i> Top Threat Sources
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div id="threat-sources" class="list-group">
+                        <div class="text-center text-muted py-3">Loading threat data...</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-6 mb-4">
+            <div class="card">
+                <div class="card-header bg-light">
+                    <h5 class="mb-0">
+                        <i class="bi bi-pie-chart"></i> Alert Distribution
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <canvas id="alertPieChart" style="max-height: 300px;"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Security Report Modal -->
+<div class="modal fade" id="reportModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Generate Security Report</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p>Select report type and period:</p>
+                <div class="mb-3">
+                    <label class="form-label">Report Type</label>
+                    <select class="form-select" id="report-type">
+                        <option value="summary">Summary Report</option>
+                        <option value="security">Security Report</option>
+                        <option value="compliance">Compliance Report</option>
+                    </select>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Period</label>
+                    <select class="form-select" id="report-period">
+                        <option value="7">Last 7 Days</option>
+                        <option value="30">Last 30 Days</option>
+                        <option value="90">Last 90 Days</option>
+                    </select>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" onclick="confirmGenerateReport()">Generate</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<!-- Chart.js for visualizations -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/moment@2.29.4/moment.min.js"></script>
+
+<!-- Dashboard JavaScript -->
+<script>
+    // Global variables
+    let activityChart = null;
+    let alertPieChart = null;
+    let lastUpdateTime = new Date();
+    
+    // Dashboard configuration
+    const DASHBOARD_CONFIG = {
+        apiBaseUrl: '{% url "security_suite:dashboard_data" %}',
+        metricsUrl: '{% url "security_suite:security_metrics" %}',
+        csrfToken: '{{ csrf_token }}',
+        refreshInterval: 30000 // 30 seconds
+    };
+    
+    // Initialize dashboard
+    $(document).ready(function() {
+        initializeCharts();
+        loadDashboardData();
+        
+        // Auto-refresh every 30 seconds
+        setInterval(function() {
+            loadDashboardData();
+            updateLastUpdated();
+        }, DASHBOARD_CONFIG.refreshInterval);
+        
+        // Update last updated time every second
+        setInterval(updateLastUpdated, 1000);
+    });
+    
+    // Initialize charts
+    function initializeCharts() {
+        // Activity Timeline Chart
+        const activityCtx = document.getElementById('activityChart').getContext('2d');
+        activityChart = new Chart(activityCtx, {
+            type: 'line',
+            data: {
+                labels: [],
+                datasets: [
+                    {
+                        label: 'Logins',
+                        data: [],
+                        borderColor: 'rgb(75, 192, 192)',
+                        backgroundColor: 'rgba(75, 192, 192, 0.1)',
+                        tension: 0.1
+                    },
+                    {
+                        label: 'Failed Logins',
+                        data: [],
+                        borderColor: 'rgb(255, 99, 132)',
+                        backgroundColor: 'rgba(255, 99, 132, 0.1)',
+                        tension: 0.1
+                    },
+                    {
+                        label: 'Security Alerts',
+                        data: [],
+                        borderColor: 'rgb(255, 206, 86)',
+                        backgroundColor: 'rgba(255, 206, 86, 0.1)',
+                        tension: 0.1
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        position: 'bottom',
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true
+                    }
+                }
+            }
+        });
+        
+        // Alert Distribution Pie Chart
+        const pieCtx = document.getElementById('alertPieChart').getContext('2d');
+        alertPieChart = new Chart(pieCtx, {
+            type: 'doughnut',
+            data: {
+                labels: [],
+                datasets: [{
+                    data: [],
+                    backgroundColor: [
+                        'rgb(255, 99, 132)',
+                        'rgb(255, 159, 64)',
+                        'rgb(255, 205, 86)',
+                        'rgb(75, 192, 192)',
+                        'rgb(54, 162, 235)',
+                        'rgb(153, 102, 255)'
+                    ]
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        position: 'right',
+                    }
+                }
+            }
+        });
+    }
+    
+    // Load dashboard data
+    function loadDashboardData() {
+        $.ajax({
+            url: DASHBOARD_CONFIG.apiBaseUrl,
+            headers: {
+                'X-CSRFToken': DASHBOARD_CONFIG.csrfToken
+            },
+            success: function(data) {
+                updateSummaryCards(data);
+                updateRecentAlerts(data.recent_alerts);
+                updateSystemStatus(data.performance);
+                updateActivityChart(data.timeline);
+                updateUserStats(data.users);
+                lastUpdateTime = new Date();
+            },
+            error: function(xhr, status, error) {
+                console.error('Failed to load dashboard data:', error);
+                showError('Failed to load dashboard data');
+            }
+        });
+        
+        // Load additional metrics
+        loadSecurityMetrics();
+    }
+    
+    // Load security metrics
+    function loadSecurityMetrics() {
+        $.ajax({
+            url: DASHBOARD_CONFIG.metricsUrl,
+            headers: {
+                'X-CSRFToken': DASHBOARD_CONFIG.csrfToken
+            },
+            data: {
+                period: '24h'
+            },
+            success: function(data) {
+                updateThreatSources(data.top_threat_ips);
+                updateAlertDistribution(data.alert_distribution);
+            }
+        });
+    }
+    
+    // Update summary cards
+    function updateSummaryCards(data) {
+        // Active alerts
+        $('#active-alerts-count').text(data.alerts_summary.total_active);
+        $('#critical-alerts-text').text(data.alerts_summary.critical + ' critical');
+        $('#alerts-badge').text(data.alerts_summary.total_active);
+        
+        // Failed logins
+        $('#failed-logins-count').text(data.failed_logins.last_24h);
+        
+        // Active sessions
+        $('#active-sessions-count').text(data.sessions.total_active);
+        $('#suspicious-sessions-text').text(data.sessions.suspicious + ' suspicious');
+        
+        // Blocked IPs
+        $('#blocked-ips-count').text(data.blocked_ips.total);
+        $('#new-blocks-text').text(data.blocked_ips.last_24h + ' today');
+    }
+    
+    // Update user statistics
+    function updateUserStats(users) {
+        $('#total-users').text(users.total);
+        $('#pending-users').text(users.pending_approval);
+        $('#pending-badge').text(users.pending_approval);
+        $('#active-today').text(users.active_today);
+        $('#without-mfa').text(users.without_mfa);
+    }
+    
+    // Update recent alerts
+    function updateRecentAlerts(alerts) {
+        let alertsHtml = '';
+        
+        if (alerts.length === 0) {
+            alertsHtml = '<div class="text-center text-muted py-3">No recent alerts</div>';
+        } else {
+            alertsHtml = '<div class="list-group list-group-flush">';
+            alerts.forEach(function(alert) {
+                const severityClass = {
+                    'critical': 'danger',
+                    'high': 'warning',
+                    'medium': 'info',
+                    'low': 'secondary',
+                    'info': 'light'
+                }[alert.severity] || 'secondary';
+                
+                alertsHtml += `
+                    <div class="list-group-item severity-${alert.severity}">
+                        <div class="d-flex justify-content-between align-items-start">
+                            <div class="flex-grow-1">
+                                <h6 class="mb-1">${escapeHtml(alert.title)}</h6>
+                                <p class="mb-1 small text-muted">${escapeHtml(alert.description)}</p>
+                                <div class="d-flex align-items-center">
+                                    <span class="badge bg-${severityClass} me-2">${alert.severity_display}</span>
+                                    <small class="text-muted">${alert.age} ago</small>
+                                    ${alert.user_email ? `<small class="text-muted ms-2">• ${escapeHtml(alert.user_email)}</small>` : ''}
+                                </div>
+                            </div>
+                            <a href="/admin/security_suite/securityalert/${alert.id}/change/" 
+                               class="btn btn-sm btn-outline-primary" 
+                               target="_blank">
+                                View
+                            </a>
+                        </div>
+                    </div>
+                `;
+            });
+            alertsHtml += '</div>';
+        }
+        
+        $('#alerts-container').html(alertsHtml);
+    }
+    
+    // Update system status
+    function updateSystemStatus(performance) {
+        // Response time
+        const responseTime = performance.avg_response_time || 0;
+        let responseStatus = 'success';
+        let responseBadgeText = 'Normal';
+        let responseBadgeClass = 'bg-success';
+        
+        if (responseTime > 1000) {
+            responseStatus = 'danger';
+            responseBadgeText = 'Slow';
+            responseBadgeClass = 'bg-danger';
+        } else if (responseTime > 500) {
+            responseStatus = 'warning';
+            responseBadgeText = 'Elevated';
+            responseBadgeClass = 'bg-warning';
+        }
+        
+        const responsePercent = Math.min((responseTime / 2000) * 100, 100);
+        
+        $('#response-badge').removeClass().addClass('badge ' + responseBadgeClass).text(responseBadgeText);
+        $('#response-progress')
+            .removeClass()
+            .addClass('progress-bar bg-' + responseStatus)
+            .css('width', responsePercent + '%');
+        $('#response-text').text(Math.round(responseTime) + 'ms');
+        $('#avg-response').text(Math.round(responseTime));
+        
+        // Error rate
+        const errorRate = performance.error_rate || 0;
+        let errorStatus = 'success';
+        let errorBadgeText = 'Low';
+        let errorBadgeClass = 'bg-success';
+        
+        if (errorRate > 5) {
+            errorStatus = 'danger';
+            errorBadgeText = 'High';
+            errorBadgeClass = 'bg-danger';
+        } else if (errorRate > 1) {
+            errorStatus = 'warning';
+            errorBadgeText = 'Medium';
+            errorBadgeClass = 'bg-warning';
+        }
+        
+        const errorPercent = Math.min(errorRate * 10, 100);
+        
+        $('#error-badge').removeClass().addClass('badge ' + errorBadgeClass).text(errorBadgeText);
+        $('#error-progress')
+            .removeClass()
+            .addClass('progress-bar bg-' + errorStatus)
+            .css('width', errorPercent + '%');
+        $('#error-text').text(errorRate.toFixed(1) + '%');
+        
+        // Total requests
+        $('#requests-badge').text(formatNumber(performance.total_requests_24h));
+        
+        // System resources (mock data for now)
+        $('#cpu-usage').text(Math.floor(Math.random() * 30 + 20) + '%');
+        $('#memory-usage').text(Math.floor(Math.random() * 40 + 30) + '%');
+        $('#storage-usage').text(Math.floor(Math.random() * 20 + 40) + '%');
+    }
+    
+    // Update activity chart
+    function updateActivityChart(timeline) {
+        if (!timeline || !activityChart) return;
+        
+        const labels = timeline.map(item => moment(item.date).format('MMM DD')).reverse();
+        const logins = timeline.map(item => item.logins).reverse();
+        const failedLogins = timeline.map(item => item.failed_logins).reverse();
+        const alerts = timeline.map(item => item.alerts).reverse();
+        
+        activityChart.data.labels = labels;
+        activityChart.data.datasets[0].data = logins;
+        activityChart.data.datasets[1].data = failedLogins;
+        activityChart.data.datasets[2].data = alerts;
+        activityChart.update();
+    }
+    
+    // Update threat sources
+    function updateThreatSources(threats) {
+        let html = '';
+        
+        if (!threats || threats.length === 0) {
+            html = '<div class="text-center text-muted py-3">No threat data available</div>';
+        } else {
+            threats.slice(0, 5).forEach(function(threat) {
+                html += `
+                    <div class="list-group-item d-flex justify-content-between align-items-center">
+                        <div>
+                            <strong>${threat.ip_address}</strong>
+                            <small class="text-muted d-block">Threat Score: ${threat.threat_score}</small>
+                        </div>
+                        <button class="btn btn-sm btn-outline-danger" onclick="blockIP('${threat.ip_address}')">
+                            Block
+                        </button>
+                    </div>
+                `;
+            });
+        }
+        
+        $('#threat-sources').html(html);
+    }
+    
+    // Update alert distribution
+    function updateAlertDistribution(distribution) {
+        if (!distribution || !alertPieChart) return;
+        
+        const labels = distribution.map(item => {
+            // Convert alert_type to readable format
+            return item.alert_type.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+        });
+        const data = distribution.map(item => item.count);
+        
+        alertPieChart.data.labels = labels;
+        alertPieChart.data.datasets[0].data = data;
+        alertPieChart.update();
+    }
+    
+    // Update last updated time
+    function updateLastUpdated() {
+        const now = new Date();
+        const diff = Math.floor((now - lastUpdateTime) / 1000);
+        
+        let text = '';
+        if (diff < 60) {
+            text = 'just now';
+        } else if (diff < 3600) {
+            const minutes = Math.floor(diff / 60);
+            text = minutes + ' minute' + (minutes > 1 ? 's' : '') + ' ago';
+        } else {
+            const hours = Math.floor(diff / 3600);
+            text = hours + ' hour' + (hours > 1 ? 's' : '') + ' ago';
+        }
+        
+        $('#last-updated').text(text);
+    }
+    
+    // Generate security report
+    function generateSecurityReport() {
+        $('#reportModal').modal('show');
+    }
+    
+    // Confirm generate report
+    function confirmGenerateReport() {
+        const reportType = $('#report-type').val();
+        const reportPeriod = $('#report-period').val();
+        
+        $('#reportModal').modal('hide');
+        
+        // Show loading
+        showLoading('Generating report...');
+        
+        $.ajax({
+            url: '{% url "audit_trail:audit_reports" %}',
+            headers: {
+                'X-CSRFToken': DASHBOARD_CONFIG.csrfToken
+            },
+            data: {
+                type: reportType,
+                days: reportPeriod
+            },
+            success: function(data) {
+                hideLoading();
+                showSuccess('Report generated successfully. Check your email.');
+            },
+            error: function(xhr, status, error) {
+                hideLoading();
+                showError('Failed to generate report: ' + error);
+            }
+        });
+    }
+    
+    // Block IP address
+    function blockIP(ipAddress) {
+        if (!confirm('Are you sure you want to block IP: ' + ipAddress + '?')) {
+            return;
+        }
+        
+        $.ajax({
+            url: '{% url "security_suite:add_ip_blacklist" %}',
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': DASHBOARD_CONFIG.csrfToken,
+                'Content-Type': 'application/json'
+            },
+            data: JSON.stringify({
+                ip_address: ipAddress,
+                reason: 'suspicious_activity',
+                description: 'Blocked from security dashboard due to high threat score'
+            }),
+            success: function(data) {
+                showSuccess('IP address blocked successfully');
+                loadDashboardData();
+            },
+            error: function(xhr, status, error) {
+                showError('Failed to block IP: ' + error);
+            }
+        });
+    }
+    
+    // Utility functions
+    function escapeHtml(text) {
+        const map = {
+            '&': '&amp;',
+            '<': '&lt;',
+            '>': '&gt;',
+            '"': '&quot;',
+            "'": '&#039;'
+        };
+        return text.replace(/[&<>"']/g, m => map[m]);
+    }
+    
+    function formatNumber(num) {
+        if (num >= 1000000) {
+            return (num / 1000000).toFixed(1) + 'M';
+        } else if (num >= 1000) {
+            return (num / 1000).toFixed(1) + 'K';
+        }
+        return num.toString();
+    }
+    
+    function showLoading(message) {
+        $('body').append(`
+            <div id="loading-overlay" class="position-fixed top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center" style="background: rgba(0,0,0,0.5); z-index: 9999;">
+                <div class="bg-white rounded p-4 text-center">
+                    <div class="spinner-border text-primary mb-3" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                    <div>${message || 'Loading...'}</div>
+                </div>
+            </div>
+        `);
+    }
+    
+    function hideLoading() {
+        $('#loading-overlay').remove();
+    }
+    
+    function showSuccess(message) {
+        showToast(message, 'success');
+    }
+    
+    function showError(message) {
+        showToast(message, 'danger');
+    }
+    
+    function showToast(message, type) {
+        const toastHtml = `
+            <div class="toast align-items-center text-white bg-${type} border-0" role="alert" aria-live="assertive" aria-atomic="true">
+                <div class="d-flex">
+                    <div class="toast-body">
+                        ${message}
+                    </div>
+                    <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+                </div>
+            </div>
+        `;
+        
+        // Create toast container if it doesn't exist
+        if (!$('#toast-container').length) {
+            $('body').append('<div id="toast-container" class="toast-container position-fixed top-0 end-0 p-3"></div>');
+        }
+        
+        const toast = $(toastHtml);
+        $('#toast-container').append(toast);
+        
+        const bsToast = new bootstrap.Toast(toast[0]);
+        bsToast.show();
+        
+        // Remove toast element after it's hidden
+        toast.on('hidden.bs.toast', function() {
+            $(this).remove();
+        });
+    }
+    
+    // Keyboard shortcuts
+    $(document).keydown(function(e) {
+        // Ctrl/Cmd + R: Refresh dashboard
+        if ((e.ctrlKey || e.metaKey) && e.key === 'r') {
+            e.preventDefault();
+            loadDashboardData();
+            showSuccess('Dashboard refreshed');
+        }
+        
+        // Ctrl/Cmd + S: Generate security report
+        if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+            e.preventDefault();
+            generateSecurityReport();
+        }
+    });
+    
+    // WebSocket connection for real-time updates (optional)
+    function connectWebSocket() {
+        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const ws = new WebSocket(protocol + '//' + window.location.host + '/ws/security/');
+        
+        ws.onopen = function() {
+            console.log('WebSocket connected for real-time updates');
+        };
+        
+        ws.onmessage = function(event) {
+            const data = JSON.parse(event.data);
+            
+            if (data.type === 'security_alert') {
+                showToast('New security alert: ' + data.alert.title, 'warning');
+                loadDashboardData();
+            } else if (data.type === 'metric_update') {
+                updateSystemStatus(data.metrics);
+            }
+        };
+        
+        ws.onerror = function(error) {
+            console.error('WebSocket error:', error);
+        };
+        
+        ws.onclose = function() {
+            console.log('WebSocket disconnected. Reconnecting in 5 seconds...');
+            setTimeout(connectWebSocket, 5000);
+        };
+    }
+    
+    // Uncomment to enable WebSocket for real-time updates
+    // connectWebSocket();
+</script>
+{% endblock %}
